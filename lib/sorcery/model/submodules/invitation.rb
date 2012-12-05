@@ -8,6 +8,7 @@ module Sorcery
                           :invitation_token_expires_at_attribute_name,   # expires at attribute name.
                           :invitation_email_sent_at_attribute_name,      # when was email sent, used for hammering
                                                                              # protection.
+                          :invitation_inviter_attribute_name,
                           :invitation_accepted_at_attribute_name,        # set when the user has accepted the invitation
 
                           :invitation_mailer,                            # mailer class. Needed.
@@ -22,12 +23,14 @@ module Sorcery
                           :invitation_expiration_period                  # how many seconds before the reset request
                                                                              # expires. nil for never expires.
 
+
           end
 
           base.sorcery_config.instance_eval do
             @defaults.merge!(:@invitation_token_attribute_name            => :invitation_token,
                              :@invitation_token_expires_at_attribute_name => :invitation_token_expires_at,
                              :@invitation_email_sent_at_attribute_name    => :invitation_email_sent_at,
+                             :@invitation_inviter_attribute_name          => :invited_by_id,
                              :@invitation_accepted_at_attribute_name      => :invitation_accepted_at,
                              :@invitation_mailer                          => nil,
                              :@invitation_mailer_disabled                 => false,
@@ -62,10 +65,13 @@ module Sorcery
         end
 
         module InstanceMethods
-          def deliver_invitation_instructions!
+          def deliver_invitation_instructions!(inviter = nil)
             config = sorcery_config
-            attributes = {config.invitation_token_attribute_name => TemporaryToken.generate_random_token,
-                          config.invitation_email_sent_at_attribute_name => Time.now.in_time_zone}
+            attributes = {
+              config.invitation_token_attribute_name => TemporaryToken.generate_random_token,
+              config.invitation_email_sent_at_attribute_name => Time.now.in_time_zone,
+              config.invitation_inviter_attribute_name => inviter && inviter.id
+            }
             if config.invitation_expiration_period && config.invitation_token_expires_at_attribute_name
               attributes[config.invitation_token_expires_at_attribute_name] =
                 Time.now.in_time_zone + config.invitation_expiration_period

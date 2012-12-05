@@ -36,11 +36,15 @@ shared_examples_for "rails_3_invitation_model" do
     end
 
     it "if mailer is nil and mailer is enabled, throw exception!" do
-      expect{sorcery_reload!([:invitation], :invitation_mailer_disabled => false)}.to raise_error(ArgumentError)
+      expect{
+        sorcery_reload!([:invitation], :invitation_mailer_disabled => false)
+      }.to raise_error(ArgumentError)
     end
 
     it "if mailer is disabled and mailer is nil, do NOT throw exception" do
-      expect{sorcery_reload!([:invitation], :invitation_mailer_disabled => true)}.to_not raise_error
+      expect{
+        sorcery_reload!([:invitation], :invitation_mailer_disabled => true)
+      }.to_not raise_error
     end
 
     it "should allow configuration option 'invitation_email_method_name'" do
@@ -108,17 +112,28 @@ shared_examples_for "rails_3_invitation_model" do
       User.load_from_invitation_token("").should == nil
     end
 
-    it "'deliver_invitation_instructions!' should generate a invitation_token" do
-      user.invitation_token.should be_nil
-      user.deliver_invitation_instructions!
-      user.invitation_token.should_not be_nil
-    end
+    describe "#deliver_invitation_instructions!" do
+      it "should generate a invitation_token" do
+        user.invitation_token.should be_nil
+        user.deliver_invitation_instructions!
+        user.invitation_token.should_not be_nil
+      end
 
-    it "the invitation_token should be random" do
-      user.deliver_invitation_instructions!
-      old_password_code = user.invitation_token
-      user.deliver_invitation_instructions!
-      user.invitation_token.should_not == old_password_code
+      it "the invitation_token should be random" do
+        user.deliver_invitation_instructions!
+        old_password_code = user.invitation_token
+        user.deliver_invitation_instructions!
+        user.invitation_token.should_not == old_password_code
+      end
+
+      context 'with an inviter' do
+        let(:inviter) { create_new_user(:username => 'inviter', :email => 'inviter@example.com') }
+
+        it "sets the users's #invited_by association" do
+          user.deliver_invitation_instructions!(inviter)
+          user.invited_by.should == inviter
+        end
+      end
     end
 
     context "mailer is enabled" do
