@@ -4,9 +4,11 @@ class AddInvitationToUsers < ActiveRecord::Migration
     add_column :users, :invitation_token_expires_at, :datetime, :default => nil
     add_column :users, :invitation_email_sent_at, :datetime, :default => nil
     add_column :users, :invitation_accepted_at, :datetime, :default => nil
+    add_column :users, :invited_by_id, :integer, :default => nil
   end
 
   def self.down
+    remove_column :users, :invited_by_id
     remove_column :users, :invitation_accepted_at
     remove_column :users, :invitation_email_sent_at
     remove_column :users, :invitation_token_expires_at

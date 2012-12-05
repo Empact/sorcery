@@ -1,4 +1,6 @@
 shared_examples_for "rails_3_invitation_model" do
+  let(:user) { create_new_user }
+
   # ----------------- PLUGIN CONFIGURATION -----------------------
   describe User, "loaded plugin configuration" do
 
@@ -11,11 +13,7 @@ shared_examples_for "rails_3_invitation_model" do
     end
 
     context "API" do
-      before(:all) do
-        create_new_user
-      end
-
-      specify { @user.should respond_to(:deliver_invitation_instructions!) }
+      specify { user.should respond_to(:deliver_invitation_instructions!) }
 
       it "should respond to .load_from_invitation_token" do
         User.should respond_to(:load_from_invitation_token)
@@ -38,11 +36,15 @@ shared_examples_for "rails_3_invitation_model" do
     end
 
     it "if mailer is nil and mailer is enabled, throw exception!" do
-      expect{sorcery_reload!([:invitation], :invitation_mailer_disabled => false)}.to raise_error(ArgumentError)
+      expect{
+        sorcery_reload!([:invitation], :invitation_mailer_disabled => false)
+      }.to raise_error(ArgumentError)
     end
 
     it "if mailer is disabled and mailer is nil, do NOT throw exception" do
-      expect{sorcery_reload!([:invitation], :invitation_mailer_disabled => true)}.to_not raise_error
+      expect{
+        sorcery_reload!([:invitation], :invitation_mailer_disabled => true)
+      }.to_not raise_error
     end
 
     it "should allow configuration option 'invitation_email_method_name'" do
@@ -77,37 +79,32 @@ shared_examples_for "rails_3_invitation_model" do
     end
 
     it "load_from_invitation_token should return user when token is found" do
-      create_new_user
-      @user.deliver_invitation_instructions!
-      User.load_from_invitation_token(@user.invitation_token).should == @user
+      user.deliver_invitation_instructions!
+      User.load_from_invitation_token(user.invitation_token).should == user
     end
 
     it "load_from_invitation_token should NOT return user when token is NOT found" do
-      create_new_user
-      @user.deliver_invitation_instructions!
+      user.deliver_invitation_instructions!
       User.load_from_invitation_token("a").should == nil
     end
 
     it "load_from_invitation_token should return user when token is found and not expired" do
-      create_new_user
       sorcery_model_property_set(:invitation_expiration_period, 500)
-      @user.deliver_invitation_instructions!
-      User.load_from_invitation_token(@user.invitation_token).should == @user
+      user.deliver_invitation_instructions!
+      User.load_from_invitation_token(user.invitation_token).should == user
     end
 
     it "load_from_invitation_token should NOT return user when token is found and expired" do
-      create_new_user
       sorcery_model_property_set(:invitation_expiration_period, 0.1)
-      @user.deliver_invitation_instructions!
+      user.deliver_invitation_instructions!
       Timecop.travel(Time.now.in_time_zone+0.5)
-      User.load_from_invitation_token(@user.invitation_token).should == nil
+      User.load_from_invitation_token(user.invitation_token).should == nil
     end
 
     it "load_from_invitation_token should always be valid if expiration period is nil" do
-      create_new_user
       sorcery_model_property_set(:invitation_expiration_period, nil)
-      @user.deliver_invitation_instructions!
-      User.load_from_invitation_token(@user.invitation_token).should == @user
+      user.deliver_invitation_instructions!
+      User.load_from_invitation_token(user.invitation_token).should == user
     end
 
     it "load_from_invitation_token should return nil if token is blank" do
@@ -115,26 +112,34 @@ shared_examples_for "rails_3_invitation_model" do
       User.load_from_invitation_token("").should == nil
     end
 
-    it "'deliver_invitation_instructions!' should generate a invitation_token" do
-      create_new_user
-      @user.invitation_token.should be_nil
-      @user.deliver_invitation_instructions!
-      @user.invitation_token.should_not be_nil
-    end
+    describe "#deliver_invitation_instructions!" do
+      it "should generate a invitation_token" do
+        user.invitation_token.should be_nil
+        user.deliver_invitation_instructions!
+        user.invitation_token.should_not be_nil
+      end
 
-    it "the invitation_token should be random" do
-      create_new_user
-      @user.deliver_invitation_instructions!
-      old_password_code = @user.invitation_token
-      @user.deliver_invitation_instructions!
-      @user.invitation_token.should_not == old_password_code
+      it "the invitation_token should be random" do
+        user.deliver_invitation_instructions!
+        old_password_code = user.invitation_token
+        user.deliver_invitation_instructions!
+        user.invitation_token.should_not == old_password_code
+      end
+
+      context 'with an inviter' do
+        let(:inviter) { create_new_user(:username => 'inviter', :email => 'inviter@example.com') }
+
+        it "sets the users's #invited_by association" do
+          user.deliver_invitation_instructions!(inviter)
+          user.invited_by.should == inviter
+        end
+      end
     end
 
     context "mailer is enabled" do
       it "should send an email on reset" do
-        create_new_user
         old_size = ActionMailer::Base.deliveries.size
-        @user.deliver_invitation_instructions!
+        user.deliver_invitation_instructions!
         ActionMailer::Base.deliveries.size.should == old_size + 1
       end
     end
@@ -146,9 +151,8 @@ shared_examples_for "rails_3_invitation_model" do
       end
 
       it "should send an email on reset" do
-        create_new_user
         old_size = ActionMailer::Base.deliveries.size
-        @user.deliver_invitation_instructions!
+        user.deliver_invitation_instructions!
         ActionMailer::Base.deliveries.size.should == old_size
       end
     end
