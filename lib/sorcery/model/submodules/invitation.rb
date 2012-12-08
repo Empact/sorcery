@@ -43,11 +43,42 @@ module Sorcery
           base.extend(ClassMethods)
 
           base.sorcery_config.after_config << :validate_mailer_defined
-
-          base.send(:include, InstanceMethods)
         end
 
         module ClassMethods
+          def accept_invitation!(token)
+            config = sorcery_config
+            invitee = load_from_invitation_token(token)
+            if invitee.send(config.invitation_token_attribute_name) == token
+              invitee.update_many_attributes(
+                config.invitation_accepted_at_attribute_name => Time.now.utc,
+                config.invitation_token_attribute_name => nil
+              )
+            end
+            invitee
+          end
+
+          def deliver_invitation_instructions!(invitee_attrs, inviter = nil)
+            config = sorcery_config
+            attributes = {
+              config.invitation_token_attribute_name => TemporaryToken.generate_random_token,
+              config.invitation_email_sent_at_attribute_name => Time.now.in_time_zone,
+              config.invitation_inviter_attribute_name => inviter && inviter.id
+            }
+            if config.invitation_expiration_period && config.invitation_token_expires_at_attribute_name
+              attributes[config.invitation_token_expires_at_attribute_name] =
+                Time.now.in_time_zone + config.invitation_expiration_period
+            end
+            transaction do
+              invitee = create!(invitee_attrs)
+              invitee.update_many_attributes(attributes)
+              unless config.invitation_mailer_disabled
+                invitee.send(:generic_send_email, :invitation_email_method_name, :invitation_mailer)
+              end
+              invitee
+            end
+          end
+
           def load_from_invitation_token(token)
             token_attr_name = @sorcery_config.invitation_token_attribute_name
             token_expiration_date_attr = @sorcery_config.invitation_token_expires_at_attribute_name
@@ -61,35 +92,6 @@ module Sorcery
           def validate_mailer_defined
             msg = "To use invitation submodule, you must define a mailer (config.invitation_mailer = YourMailerClass)."
             raise ArgumentError, msg if @sorcery_config.invitation_mailer == nil and @sorcery_config.invitation_mailer_disabled == false
-          end
-        end
-
-        module InstanceMethods
-          def deliver_invitation_instructions!(inviter = nil)
-            config = sorcery_config
-            attributes = {
-              config.invitation_token_attribute_name => TemporaryToken.generate_random_token,
-              config.invitation_email_sent_at_attribute_name => Time.now.in_time_zone,
-              config.invitation_inviter_attribute_name => inviter && inviter.id
-            }
-            if config.invitation_expiration_period && config.invitation_token_expires_at_attribute_name
-              attributes[config.invitation_token_expires_at_attribute_name] =
-                Time.now.in_time_zone + config.invitation_expiration_period
-            end
-            self.class.transaction do
-              self.update_many_attributes(attributes)
-              generic_send_email(:invitation_email_method_name, :invitation_mailer) unless config.invitation_mailer_disabled
-            end
-          end
-
-          def accept_invitation!(token)
-            config = sorcery_config
-            if self.send(config.invitation_token_attribute_name) == token
-              self.update_many_attributes(
-                config.invitation_accepted_at_attribute_name => Time.now.utc,
-                config.invitation_token_attribute_name => nil
-              )
-            end
           end
         end
       end
