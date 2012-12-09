@@ -43,19 +43,15 @@ module Sorcery
           base.extend(ClassMethods)
 
           base.sorcery_config.after_config << :validate_mailer_defined
+
+          base.send(:include, InstanceMethods)
         end
 
         module ClassMethods
-          def accept_invitation!(token)
+          def accept_invitation!(token, attrs = {})
             config = sorcery_config
             invitee = load_from_invitation_token(token)
-            if invitee.send(config.invitation_token_attribute_name) == token
-              invitee.update_many_attributes(
-                config.invitation_accepted_at_attribute_name => Time.now.utc,
-                config.invitation_token_attribute_name => nil
-              )
-            end
-            invitee
+            invitee.accept_invitation!(attrs) if invitee
           end
 
           def deliver_invitation_instructions!(invitee_attrs, inviter = nil)
@@ -104,6 +100,18 @@ module Sorcery
             msg = "To use invitation submodule, you must define a mailer (config.invitation_mailer = YourMailerClass)."
             raise ArgumentError, msg if @sorcery_config.invitation_mailer == nil and @sorcery_config.invitation_mailer_disabled == false
           end
+        end
+      end
+
+      module InstanceMethods
+        def accept_invitation!(attrs = {})
+          config = sorcery_config
+          update_attributes!(attrs)
+          update_many_attributes(
+            config.invitation_accepted_at_attribute_name => Time.now.utc,
+            config.invitation_token_attribute_name => nil
+          )
+          self
         end
       end
     end

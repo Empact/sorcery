@@ -170,7 +170,7 @@ shared_examples_for "rails_3_invitation_model" do
       end
     end
 
-    describe "#accept_invitation" do
+    describe ".accept_invitation" do
       before do
         @user = User.deliver_invitation_instructions!(user_attributes)
         @accepted_user = User.accept_invitation!(@user.invitation_token)
@@ -186,6 +186,21 @@ shared_examples_for "rails_3_invitation_model" do
 
       it 'should mark the user as having accepted their invitation' do
         @accepted_user.invitation_accepted_at.should_not == nil
+      end
+    end
+
+    describe "#accept_invitation" do
+      before do
+        @user = User.deliver_invitation_instructions!(user_attributes)
+        @user.accept_invitation!
+      end
+
+      it 'should clear the invitation token' do
+        @user.invitation_token.should == nil
+      end
+
+      it 'should mark the user as having accepted their invitation' do
+        @user.invitation_accepted_at.should_not == nil
       end
     end
 
