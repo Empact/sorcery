@@ -130,6 +130,36 @@ shared_examples_for "rails_3_invitation_model" do
         user.invitation_token.should_not == old_password_code
       end
 
+      context 'for an existing invitee' do
+        let(:username_attributes) { {username: 'foo'} }
+        before do
+          @existing_invitee = User.deliver_invitation_instructions!(user_attributes)
+        end
+
+        it 'acts on the same user' do
+          invitee = User.deliver_invitation_instructions!(user_attributes)
+          invitee.should == @existing_invitee
+        end
+
+        it 'resends the invitation' do
+          expect {
+            User.deliver_invitation_instructions!(user_attributes)
+          }.to change(ActionMailer::Base.deliveries, :size).by(1)
+        end
+      end
+
+      context 'for a full user' do
+        before do
+          @user = create_new_user
+        end
+
+        it 'does nothing' do
+          expect {
+            User.deliver_invitation_instructions!(username: @user.username)
+          }.to_not change(ActionMailer::Base.deliveries, :size)
+        end
+      end
+
       context 'with an inviter' do
         let(:inviter) { create_new_user(:username => 'inviter', :email => 'inviter@example.com') }
 
@@ -161,9 +191,9 @@ shared_examples_for "rails_3_invitation_model" do
 
     context "mailer is enabled" do
       it "should send an email on reset" do
-        old_size = ActionMailer::Base.deliveries.size
-        User.deliver_invitation_instructions!(user_attributes)
-        ActionMailer::Base.deliveries.size.should == old_size + 1
+        expect {
+          User.deliver_invitation_instructions!(user_attributes)
+        }.to change(ActionMailer::Base.deliveries, :size).by(1)
       end
     end
 
@@ -173,10 +203,10 @@ shared_examples_for "rails_3_invitation_model" do
         sorcery_reload!([:invitation], :invitation_mailer_disabled => true, :invitation_mailer => ::SorceryMailer)
       end
 
-      it "should send an email on reset" do
-        old_size = ActionMailer::Base.deliveries.size
-        User.deliver_invitation_instructions!(user_attributes)
-        ActionMailer::Base.deliveries.size.should == old_size
+      it "should not send an email on reset" do
+        expect {
+          User.deliver_invitation_instructions!(user_attributes)
+        }.to_not change(ActionMailer::Base.deliveries, :size)
       end
     end
 

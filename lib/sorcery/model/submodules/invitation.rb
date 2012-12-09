@@ -60,6 +60,15 @@ module Sorcery
 
           def deliver_invitation_instructions!(invitee_attrs, inviter = nil)
             config = sorcery_config
+
+            existing_invitee =
+              config.username_attribute_names.map do |username_attribute|
+                where(username_attribute => invitee_attrs[username_attribute]).first
+              end.first
+            if existing_invitee && !existing_invitee.send(config.invitation_token_attribute_name)
+              return existing_invitee
+            end
+
             attributes = {
               config.invitation_token_attribute_name => TemporaryToken.generate_random_token,
               config.invitation_email_sent_at_attribute_name => Time.now.in_time_zone,
@@ -69,11 +78,13 @@ module Sorcery
               attributes[config.invitation_token_expires_at_attribute_name] =
                 Time.now.in_time_zone + config.invitation_expiration_period
             end
+            invitee = existing_invitee || new(invitee_attrs)
             transaction do
-              invitee = create!(invitee_attrs)
-              invitee.update_many_attributes(attributes)
-              unless config.invitation_mailer_disabled
-                invitee.send(:generic_send_email, :invitation_email_method_name, :invitation_mailer)
+              if invitee.persisted? || invitee.save
+                invitee.update_many_attributes(attributes)
+                unless config.invitation_mailer_disabled
+                  invitee.send(:generic_send_email, :invitation_email_method_name, :invitation_mailer)
+                end
               end
               invitee
             end
