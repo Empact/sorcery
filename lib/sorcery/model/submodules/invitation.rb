@@ -48,6 +48,44 @@ module Sorcery
         end
 
         module ClassMethods
+          def accept_invitation!(token, attrs = {})
+            config = sorcery_config
+            invitee = load_from_invitation_token(token)
+            invitee.accept_invitation!(attrs) if invitee
+          end
+
+          def deliver_invitation_instructions!(invitee_attrs, inviter = nil)
+            config = sorcery_config
+
+            existing_invitee =
+              config.username_attribute_names.map do |username_attribute|
+                where(username_attribute => invitee_attrs[username_attribute]).first
+              end.first
+            if existing_invitee && !existing_invitee.send(config.invitation_token_attribute_name)
+              return existing_invitee
+            end
+
+            attributes = {
+              config.invitation_token_attribute_name => TemporaryToken.generate_random_token,
+              config.invitation_email_sent_at_attribute_name => Time.now.in_time_zone,
+              config.invitation_inviter_attribute_name => inviter && inviter.id
+            }
+            if config.invitation_expiration_period && config.invitation_token_expires_at_attribute_name
+              attributes[config.invitation_token_expires_at_attribute_name] =
+                Time.now.in_time_zone + config.invitation_expiration_period
+            end
+            invitee = existing_invitee || new(invitee_attrs)
+            transaction do
+              if invitee.persisted? || invitee.save
+                invitee.update_many_attributes(attributes)
+                unless config.invitation_mailer_disabled
+                  invitee.send(:generic_send_email, :invitation_email_method_name, :invitation_mailer)
+                end
+              end
+              invitee
+            end
+          end
+
           def load_from_invitation_token(token)
             token_attr_name = @sorcery_config.invitation_token_attribute_name
             token_expiration_date_attr = @sorcery_config.invitation_token_expires_at_attribute_name
@@ -63,34 +101,17 @@ module Sorcery
             raise ArgumentError, msg if @sorcery_config.invitation_mailer == nil and @sorcery_config.invitation_mailer_disabled == false
           end
         end
+      end
 
-        module InstanceMethods
-          def deliver_invitation_instructions!(inviter = nil)
-            config = sorcery_config
-            attributes = {
-              config.invitation_token_attribute_name => TemporaryToken.generate_random_token,
-              config.invitation_email_sent_at_attribute_name => Time.now.in_time_zone,
-              config.invitation_inviter_attribute_name => inviter && inviter.id
-            }
-            if config.invitation_expiration_period && config.invitation_token_expires_at_attribute_name
-              attributes[config.invitation_token_expires_at_attribute_name] =
-                Time.now.in_time_zone + config.invitation_expiration_period
-            end
-            self.class.transaction do
-              self.update_many_attributes(attributes)
-              generic_send_email(:invitation_email_method_name, :invitation_mailer) unless config.invitation_mailer_disabled
-            end
-          end
-
-          def accept_invitation!(token)
-            config = sorcery_config
-            if self.send(config.invitation_token_attribute_name) == token
-              self.update_many_attributes(
-                config.invitation_accepted_at_attribute_name => Time.now.utc,
-                config.invitation_token_attribute_name => nil
-              )
-            end
-          end
+      module InstanceMethods
+        def accept_invitation!(attrs = {})
+          config = sorcery_config
+          update_attributes!(attrs)
+          update_many_attributes(
+            config.invitation_accepted_at_attribute_name => Time.now.utc,
+            config.invitation_token_attribute_name => nil
+          )
+          self
         end
       end
     end
